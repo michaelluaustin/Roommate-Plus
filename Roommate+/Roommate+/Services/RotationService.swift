@@ -8,85 +8,86 @@ class RotationService {
         self.supabase = supabase
     }
 
-    /// Mark item as fulfilled and rotate to next user
-    /// Uses last-write-wins policy for offline conflicts
+    private struct FulfillUpdate: Encodable {
+        let current_assignee_id: String
+        let last_fulfilled_by_user_id: String
+        let last_fulfilled_at: String
+    }
+    private struct NewHistory: Encodable {
+        let household_id: String
+        let item_id: String
+        let fulfilled_by_user_id: String
+        let fulfilled_at: String
+    }
+
+    /// Mark item fulfilled, rotate to the next active user (skipping paused),
+    /// log history, and fire notifications. Last-write-wins on conflicts.
     func markItemFulfilled(
         item: Item,
         fulfilledByUser: User,
         users: [User]
     ) async -> Item? {
-        // Find the next user in rotation order (respecting pause)
-        let activeUsers = users.filter { $0.pausedUntil == nil || $0.pausedUntil! < Date() }
-        guard let currentIndex = activeUsers.firstIndex(where: { $0.rotationOrder == fulfilledByUser.rotationOrder }) else {
+        guard let nextUser = nextUserInRotation(currentUser: fulfilledByUser, allUsers: users) else {
             return nil
         }
 
-        let nextIndex = (currentIndex + 1) % activeUsers.count
-        let nextUser = activeUsers[nextIndex]
+        let nowISO = SupabaseDate.string(from: Date())
 
         do {
-            // Update item assignment (last-write-wins)
-            let updated = try await supabase.database
+            let updated: Item = try await supabase
                 .from("items")
-                .update([
-                    "current_assignee_id": nextUser.id,
-                    "last_fulfilled_by_user_id": fulfilledByUser.id,
-                    "last_fulfilled_at": Date().ISO8601Format()
-                ])
+                .update(FulfillUpdate(
+                    current_assignee_id: nextUser.id,
+                    last_fulfilled_by_user_id: fulfilledByUser.id,
+                    last_fulfilled_at: nowISO
+                ))
                 .eq("id", value: item.id)
                 .select()
                 .single()
                 .execute()
-                .value as! [String: Any]
+                .value
 
-            // Log to history
-            _ = try await supabase.database
+            try await supabase
                 .from("history")
-                .insert([
-                    "household_id": item.householdId,
-                    "item_id": item.id,
-                    "fulfilled_by_user_id": fulfilledByUser.id,
-                    "fulfilled_at": Date().ISO8601Format()
-                ])
+                .insert(NewHistory(
+                    household_id: item.householdId,
+                    item_id: item.id,
+                    fulfilled_by_user_id: fulfilledByUser.id,
+                    fulfilled_at: nowISO
+                ))
                 .execute()
 
-            // Send notifications
-            let notificationService = NotificationService.shared
-            await notificationService.sendCelebrationNotification(
-                for: item,
-                fulfilledBy: fulfilledByUser,
-                householdUsers: users
+            let notifications = NotificationService.shared
+            await notifications.sendCelebrationNotification(
+                for: item, fulfilledBy: fulfilledByUser, householdUsers: users
             )
-            await notificationService.sendAssignmentNotification(to: nextUser, item: item)
+            await notifications.sendAssignmentNotification(to: nextUser, item: updated)
 
-            return Item(
-                id: updated["id"] as! String,
-                householdId: updated["household_id"] as! String,
-                name: updated["name"] as! String,
-                currentAssigneeId: updated["current_assignee_id"] as? String,
-                lastFulfilledByUserId: updated["last_fulfilled_by_user_id"] as? String,
-                lastFulfilledAt: Date(),
-                createdAt: Date()
-            )
+            return updated
         } catch {
             print("Failed to mark item fulfilled: \(error)")
             return nil
         }
     }
 
-    /// Calculate next rotation user (strict round-robin)
-    /// Skips users whose paused_until > now
-    func nextUserInRotation(
-        currentUser: User,
-        allUsers: [User]
-    ) -> User? {
-        let activeUsers = allUsers.filter { $0.pausedUntil == nil || $0.pausedUntil! < Date() }
+    /// Next user in strict round-robin order, skipping anyone currently paused.
+    /// Ordering is by rotationOrder so it's stable regardless of array order.
+    func nextUserInRotation(currentUser: User, allUsers: [User]) -> User? {
+        let active = allUsers
+            .filter { !$0.isPaused || $0.id == currentUser.id }
+            .sorted { $0.rotationOrder < $1.rotationOrder }
 
-        guard let currentIndex = activeUsers.firstIndex(where: { $0.id == currentUser.id }) else {
-            return nil
+        guard !active.isEmpty else { return nil }
+        guard let idx = active.firstIndex(where: { $0.id == currentUser.id }) else {
+            return active.first
         }
 
-        let nextIndex = (currentIndex + 1) % activeUsers.count
-        return activeUsers[nextIndex]
+        // Walk forward to the next non-paused user (excludes self unless solo).
+        for step in 1...active.count {
+            let candidate = active[(idx + step) % active.count]
+            if candidate.id == currentUser.id { return candidate } // solo household
+            if !candidate.isPaused { return candidate }
+        }
+        return active[(idx + 1) % active.count]
     }
 }

@@ -4,6 +4,7 @@ struct GroceryListView: View {
     @StateObject private var authService = AuthService.shared
     @State private var showingJoinCode = false
     @State private var joinCode = ""
+    @State private var realtimeService: RealtimeService?
 
     var body: some View {
         NavigationStack {
@@ -85,6 +86,10 @@ struct GroceryListView: View {
             }
             .task {
                 await authService.fetchHouseholdData()
+                startRealtime()
+            }
+            .onDisappear {
+                realtimeService?.stop()
             }
             .sheet(isPresented: $showingJoinCode) {
                 JoinCodeSheet(joinCode: $joinCode, authService: authService)
@@ -92,8 +97,18 @@ struct GroceryListView: View {
         }
     }
 
+    private func startRealtime() {
+        guard let householdId = authService.currentHousehold?.id else { return }
+        let service = RealtimeService(supabase: authService.supabase)
+        realtimeService = service
+        service.start(householdId: householdId) {
+            await authService.fetchHouseholdData()
+        }
+    }
+
     private func leaveHousehold() {
         Task {
+            realtimeService?.stop()
             await authService.leaveHousehold()
         }
     }
@@ -231,9 +246,7 @@ struct JoinCodeSheet: View {
     private func generateCode() {
         Task {
             if let code = await authService.generateJoinCode() {
-                DispatchQueue.main.async {
-                    self.joinCode = code
-                }
+                joinCode = code
             }
         }
     }

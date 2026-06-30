@@ -1,21 +1,27 @@
 import Foundation
 
-struct User: Identifiable, Codable {
+struct User: Identifiable, Codable, Equatable {
     let id: String
     let householdId: String
     let name: String
     let email: String?
     let rotationOrder: Int
-    let pausedUntil: Date?
-    let createdAt: Date
+    let pausedUntilRaw: String?
+    let createdAtRaw: String?
+
+    var pausedUntil: Date? { SupabaseDate.parse(pausedUntilRaw) }
+    var createdAt: Date? { SupabaseDate.parse(createdAtRaw) }
+
+    var isPaused: Bool {
+        guard let until = pausedUntil else { return false }
+        return until > Date()
+    }
 
     enum CodingKeys: String, CodingKey {
-        case id
+        case id, name, email
         case householdId = "household_id"
-        case name
-        case email
         case rotationOrder = "rotation_order"
-        case pausedUntil = "paused_until"
-        case createdAt = "created_at"
+        case pausedUntilRaw = "paused_until"
+        case createdAtRaw = "created_at"
     }
 }

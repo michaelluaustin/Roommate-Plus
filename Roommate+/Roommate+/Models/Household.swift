@@ -1,15 +1,16 @@
 import Foundation
 
-struct Household: Identifiable, Codable {
+struct Household: Identifiable, Codable, Equatable {
     let id: String
     let name: String
-    let createdByUserId: String
-    let createdAt: Date
+    let createdByUserId: String?
+    let createdAtRaw: String?
+
+    var createdAt: Date? { SupabaseDate.parse(createdAtRaw) }
 
     enum CodingKeys: String, CodingKey {
-        case id
-        case name
+        case id, name
         case createdByUserId = "created_by_user_id"
-        case createdAt = "created_at"
+        case createdAtRaw = "created_at"
     }
 }
