@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		00A0377F2FF428BA0099752D /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 00A0377E2FF428BA0099752D /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		00A037552FF426BA0099752D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				00A0377F2FF428BA0099752D /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = "Roommate+";
 			packageProductDependencies = (
+				00A0377E2FF428BA0099752D /* Supabase */,
 			);
 			productName = "Roommate+";
 			productReference = 00A037472FF426B70099752D /* Roommate+.app */;
@@ -403,6 +409,8 @@
 				DEVELOPMENT_TEAM = 6MBTUVFP9Z;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationQueriesSchemes = venmo;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Roommate+ uses your photo library so you can set a profile picture.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -435,6 +443,8 @@
 				DEVELOPMENT_TEAM = 6MBTUVFP9Z;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationQueriesSchemes = venmo;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Roommate+ uses your photo library so you can set a profile picture.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -592,6 +602,14 @@
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		00A0377E2FF428BA0099752D /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 00A0377D2FF428BA0099752D /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 00A0373F2FF426B70099752D /* Project object */;
 }

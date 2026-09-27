@@ -1,6 +1,11 @@
 import Foundation
 import Supabase
 
+enum RotationResult {
+    case success(Item)
+    case failure(String)
+}
+
 class RotationService {
     let supabase: SupabaseClient
 
@@ -21,20 +26,28 @@ class RotationService {
     }
 
     /// Mark item fulfilled, rotate to the next active user (skipping paused),
-    /// log history, and fire notifications. Last-write-wins on conflicts.
+    /// log history, and fire notifications.
     func markItemFulfilled(
         item: Item,
         fulfilledByUser: User,
         users: [User]
-    ) async -> Item? {
+    ) async -> RotationResult {
+        guard item.currentAssigneeId == fulfilledByUser.id else {
+            return .failure("This item is no longer your turn. Pull to refresh.")
+        }
+
+        guard !users.isEmpty else {
+            return .failure("No roommates loaded. Pull to refresh and try again.")
+        }
+
         guard let nextUser = nextUserInRotation(currentUser: fulfilledByUser, allUsers: users) else {
-            return nil
+            return .failure("No one is available in the rotation.")
         }
 
         let nowISO = SupabaseDate.string(from: Date())
 
         do {
-            let updated: Item = try await supabase
+            try await supabase
                 .from("items")
                 .update(FulfillUpdate(
                     current_assignee_id: nextUser.id,
@@ -42,10 +55,7 @@ class RotationService {
                     last_fulfilled_at: nowISO
                 ))
                 .eq("id", value: item.id)
-                .select()
-                .single()
                 .execute()
-                .value
 
             try await supabase
                 .from("history")
@@ -57,21 +67,31 @@ class RotationService {
                 ))
                 .execute()
 
+            let updated = Item(
+                id: item.id,
+                householdId: item.householdId,
+                name: item.name,
+                currentAssigneeId: nextUser.id,
+                lastFulfilledByUserId: fulfilledByUser.id,
+                lastFulfilledAtRaw: nowISO,
+                createdAtRaw: item.createdAtRaw
+            )
+
             let notifications = NotificationService.shared
             await notifications.sendCelebrationNotification(
                 for: item, fulfilledBy: fulfilledByUser, householdUsers: users
             )
-            await notifications.sendAssignmentNotification(to: nextUser, item: updated)
+            if nextUser.id != fulfilledByUser.id {
+                await notifications.sendAssignmentNotification(to: nextUser, item: updated)
+            }
 
-            return updated
+            return .success(updated)
         } catch {
-            print("Failed to mark item fulfilled: \(error)")
-            return nil
+            return .failure("Couldn't update \(item.name): \(error.localizedDescription)")
         }
     }
 
     /// Next user in strict round-robin order, skipping anyone currently paused.
-    /// Ordering is by rotationOrder so it's stable regardless of array order.
     func nextUserInRotation(currentUser: User, allUsers: [User]) -> User? {
         let active = allUsers
             .filter { !$0.isPaused || $0.id == currentUser.id }
@@ -82,10 +102,9 @@ class RotationService {
             return active.first
         }
 
-        // Walk forward to the next non-paused user (excludes self unless solo).
         for step in 1...active.count {
             let candidate = active[(idx + step) % active.count]
-            if candidate.id == currentUser.id { return candidate } // solo household
+            if candidate.id == currentUser.id { return candidate }
             if !candidate.isPaused { return candidate }
         }
         return active[(idx + 1) % active.count]

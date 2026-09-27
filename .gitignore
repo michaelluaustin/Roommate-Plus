@@ -1,7 +1,21 @@
+# macOS
 .DS_Store
-*.xcodeproj/xcuserdata/
-*.xcodeproj/project.xcworkspace/xcuserdata/
-DerivedData/
-.swiftpm/
-.env
 
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+DerivedData/
+build/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# Secrets — never commit real keys (see Secrets.example.plist)
+.env
+.env.*
+**/Secrets.plist
+
+# Local tooling
+.claude/
